@@ -1,7 +1,7 @@
-# Simulator Control Platform
+# A Unified Interactive Simulation Platform for Smart Mobility: Adversarial Attack Generation in Connected Autonomous Vehicles
 
-> **Paper Reference:** This repository contains the code for the paper **"A Unified Interactive Simulation Platform for Smart Mobility: Adversarial Attack Generation in Connected Autonomous Vehicles"**.
-> 
+**Paper Reference:*s* This repository contains the code for the paper **"A Unified Interactive Simulation Platform for Smart Mobility: Adversarial Attack Generation in Connected Autonomous Vehicles"**.
+
 > **Acknowledgements:** This project acknowledges the conceptual and technical contributions of the following open-source platforms:
 > - [OpenCDA](https://github.com/ucla-mobility/OpenCDA)
 > - [CarlaSumoArtery-CoSimulation](https://github.com/mohammedLamine/CarlaSumoArtery-CoSimulation)
@@ -127,51 +127,6 @@ pm2 logs       # View service logs
 ./stop.sh --frontend # Stop web interface only
 ./stop.sh --services # Stop simulator services only
 ```
-
----
-
-## Simulation Modes
-
-The platform supports two simulation modes with **synchronized co-simulation** between CARLA, SUMO, and optionally Artery.
-
-### Mode 1: SUMO Co-Simulation
-
-Run Carla with SUMO for traffic simulation, with optional Artery V2X communication.
-
-**Configuration:**
-```yaml
-mode: "sumo_cosim"
-
-carla:
-  town: "Town01"
-  port: 2000
-  quality: "Low"
-
-sumo:
-  enabled: true
-  config: "sumo_configs/Town01.sumocfg"
-  host: "localhost"
-  port: 8813
-  num_clients: 2  # Artery + sync script
-  gui: false      # Set to true for SUMO GUI
-
-artery:
-  enabled: true   # Enable V2X communication
-  ini_path: "/path/to/artery/omnetpp.ini"
-
-sync:
-  enabled: true
-  step_length: 0.05      # 20 Hz simulation
-  tls_manager: "carla"   # Traffic light control
-```
-
-**Services Started:**
-1. `carla-headless` - CARLA simulator server
-2. `config-launcher` - Loads map into CARLA
-3. `sumo-server` - SUMO traffic simulation with TraCI
-4. `sync-simulators` - Synchronization bridge (connects to SUMO, starts Artery)
-5. `image-capture` - BEV camera service
-
 **How It Works:**
 - SUMO runs as a separate TraCI server
 - Artery (if enabled) connects to SUMO with **client order 1** (controls simulation step)
