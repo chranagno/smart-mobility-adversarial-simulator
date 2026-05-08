@@ -1,6 +1,5 @@
 # A Unified Interactive Simulation Platform for Smart Mobility: Adversarial Attack Generation in Connected Autonomous Vehicles
 
-**Paper Reference:*s* This repository contains the code for the paper **"A Unified Interactive Simulation Platform for Smart Mobility: Adversarial Attack Generation in Connected Autonomous Vehicles"**.
 
 > **Acknowledgements:** This project acknowledges the conceptual and technical contributions of the following open-source platforms:
 > - [OpenCDA](https://github.com/ucla-mobility/OpenCDA)
