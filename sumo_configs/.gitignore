@@ -1,0 +1,25 @@
+# Generated SUMO files
+*.net.xml
+*.xodr
+*.edg.xml
+*.nod.xml
+*.con.xml
+*.typ.xml
+*.tll.xml
+
+# Generated route files (keep templates)
+# Uncomment these if you generate your own routes
+# *.rou.xml
+# *.trips.xml
+
+# SUMO output files
+*.xml.gz
+fcd-output.xml
+emission-output.xml
+summary-output.xml
+tripinfo-output.xml
+
+# Temporary files
+*.log
+*.bak
+*~

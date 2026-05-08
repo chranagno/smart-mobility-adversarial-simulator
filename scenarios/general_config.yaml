@@ -1,0 +1,86 @@
+# General Configuration File
+# This file contains common settings for Artery, SUMO, and CARLA
+# These settings will be merged with scenario-specific YAML files
+
+# CARLA settings (common across all scenarios)
+carla:
+  host: "127.0.0.1"
+  port: 2000
+  version: "0.9.15"
+  
+# SUMO settings (common across all scenarios)
+sumo:
+  host: 127.0.0.1  # Auto-assigned by the simulator if not specified
+  port: 8813  # Auto-assigned by the simulator if not specified
+  gui: false  # Set to true to show SUMO GUI
+  client_order: 2
+  
+# Artery settings (common across all scenarios)
+artery:
+  enabled: true
+  port: 5555  # Port for CAM message reception
+  control_port: 8888  # Port for Artery ExternalControl
+  host: "127.0.0.1"
+  ini_path: "/home/chranagno/Workspace/repos/artery/scenarios/integrated-simulator/omnetpp.ini"  # Default Artery INI file
+  
+# World settings (common defaults)
+world:
+  fixed_delta_seconds: 0.05
+  seed: 11  # Random seed for reproducibility
+  sync_mode: true
+  # Weather settings (CARLA weather parameters)
+  weather:
+    sun_altitude_angle: 70.0  # Sun altitude in degrees (0-90)
+    cloudiness: 90.0  # Cloudiness (0.0-100.0)
+    precipitation: 90.0  # Precipitation (0.0-100.0)
+    precipitation_deposits: 0.0  # Precipitation deposits (0.0-100.0)
+    wind_intensity: 0.0  # Wind intensity (0.0-100.0)
+    fog_density: 50.0  # Fog density (0.0-100.0)
+    fog_distance: 0.0  # Fog distance (0.0-100.0)
+    fog_falloff: 0.0  # Fog falloff (0.0-100.0)
+    wetness: 0.0  # Wetness (0.0-100.0)
+  
+# Vehicle base configuration (applied to all vehicles)
+vehicle_base:
+  sensing:
+    perception:
+      # Disable ML perception for clean labels; sensors still spawn for dumping
+      activate: false
+      camera:
+        visualize: 0  # No on-screen visualization, but sensors will still be spawned for dumping
+        num: 4       # Front/left/right/rear RGB cameras
+        positions:
+          - [2.5, 0.0, 1.2, 0]     # front
+          - [0.0, 0.5, 1.6, 90]    # left
+          - [0.0, -0.5, 1.6, -90]  # right
+          - [-2.0, 0.0, 1.2, 180]  # rear
+      lidar:
+        visualize: false
+        channels: 32
+        range: 120
+        points_per_second: 1000000
+        rotation_frequency: 20
+        upper_fov: 10.0
+        lower_fov: -30.0
+        dropoff_general_rate: 0.0
+        dropoff_intensity_limit: 1.0
+        dropoff_zero_intensity: 0.0
+        noise_stddev: 0.0
+    localization:
+      activate: true
+      debug_helper:
+        show_animation: false
+  behavior:
+    ignore_traffic_light: false
+    collision_time_ahead: 2.0
+  map_manager:
+    visualize: false
+    activate: false
+
+# Recording / data dump defaults
+recording:
+  data_dump: true               # Enable simulator data dumping (sensors + GT)
+  include_ground_truth: true    # Save GT poses alongside sensor data
+  data_dump_dir: "/home/chranagno/Workspace/repos/simulator/data"
+  apply_to_all_cavs: true       # Attach sensors to all SUMO-synced vehicles
+  max_vehicles: 5               # Cap to avoid CARLA performance collapse (0 = unlimited)

@@ -1,0 +1,47 @@
+# Global Simulator Paths Configuration
+# This file defines the installation paths for all simulator components
+# These paths are environment-specific and separate from scenario configurations
+
+# Carla Simulator Paths
+carla:
+  # Path to Carla installation directory (contains CarlaUE4.sh or CarlaUE4.exe)
+  installation_path: "/home/chranagno/Workspace/repos/carla/Dist/CARLA_Shipping_0.9.15-dirty/LinuxNoEditor"
+
+  # Path to Carla executable script
+  executable: "/home/chranagno/Workspace/repos/carla/Dist/CARLA_Shipping_0.9.15-dirty/LinuxNoEditor/CarlaUE4.sh"
+
+  # Path to Carla Python API (used by CARLA_HOME environment variable)
+  # This should point to the directory containing PythonAPI/carla/dist/carla-*.egg
+  python_api_path: "/home/chranagno/Workspace/repos/carla/Dist/CARLA_Shipping_0.9.15-dirty/LinuxNoEditor"
+
+  # Path to Carla ScenarioRunner
+  scenario_runner_path: "/home/chranagno/Workspace/repos/simulator_paper/scenario_runner"
+
+  # Path to scenario_runner.py executable
+  scenario_runner_executable: "/home/chranagno/Workspace/repos/simulator_paper/scenario_runner/scenario_runner.py"
+
+# SUMO Simulator Paths
+sumo:
+  # Path to SUMO installation directory
+  installation_path: "/usr/share/sumo"
+
+  # Path to SUMO binary (usually in /usr/bin/sumo or installation_path/bin/sumo)
+  executable: "/usr/bin/sumo"
+
+  # Path to SUMO tools directory (contains traci, sumolib, etc.)
+  tools_path: "/usr/share/sumo/tools"
+
+# Artery/OMNeT++ Paths
+artery:
+  # Path to OMNeT++ installation root
+  omnetpp_root: "/home/chranagno/omnetpp-5.7.1"
+
+  # Path to Artery installation directory
+  installation_path: "/home/chranagno/Workspace/repos/artery/"
+
+  # Path to Artery build directory (for sync_simulators.py)
+  # Usually artery/build or artery/cmake-build
+  build_path: "/home/chranagno/Workspace/repos/artery/build"
+
+  # Path to Artery executable or run script
+  executable: "/home/chranagno/Workspace/repos/simulator_paper/scripts/run_artery.sh"

@@ -241,7 +241,7 @@ Each simulation step (default: 0.05s):
 ### Configuration Files
 
 - **PM2 Config**: `config/simulator.config.js` - Service orchestration
-- **Artery TraCI**: `python_scripts/carla/Co-Simulation/arterysim/sumo-omnetpp-med.ini` - Client order=1
+- **Artery TraCI**: `src/carla/Co-Simulation/arterysim/sumo-omnetpp-med.ini` - Client order=1
 - **Sync Settings**: `scenarios/*.yaml` - Step length, TLS manager, sync options
 
 ---

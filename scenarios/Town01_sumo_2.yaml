@@ -1,0 +1,211 @@
+description: |-
+  OScenario configuration for Town04 with CARLA-SUMO co-simulation and Artery integration
+
+
+# CARLA world settings (overrides general config)
+world:
+  town: Town01
+  # Weather can be overridden here if needed
+  weather:
+    cloudiness: 00.0  # Example: cloudy weather for this scenario
+
+# Vehicle base configuration (applied to all vehicles)
+vehicle_base:
+  sensing:
+    perception:
+      # Turn off perception DL pipeline when dumping data to avoid label noise.
+      activate: false
+      camera:
+        visualize: 0  # Visualization disabled; sensors still spawn when data_dump is enabled
+        num: 4
+        # Front, left, right, rear cameras for ego/CAVs
+        positions:
+          - [2.5, 0.0, 1.2, 0]     # front RGB
+          - [0.0, 0.5, 1.6, 90]    # left RGB
+          - [0.0, -0.5, 1.6, -90]  # right RGB
+          - [-2.0, 0.0, 1.2, 180]  # rear RGB
+      lidar:
+        visualize: true
+        channels: 32
+        range: 120
+        points_per_second: 1000000
+        rotation_frequency: 20
+        upper_fov: 10.0
+        lower_fov: -30.0
+        dropoff_general_rate: 0.0
+        dropoff_intensity_limit: 1.0
+        dropoff_zero_intensity: 0.0
+        noise_stddev: 0.0
+    localization:
+      activate: true
+      debug_helper:
+        show_animation: false
+  behavior:
+    ignore_traffic_light: false
+    collision_time_ahead: 2.0
+  # map_manager:
+  #   visualize: false
+  #   activate: false
+
+# Recording controls for  data dump (sensors + ground truth)
+recording:
+  data_dump: true          # Enable  DataDumper (RGB, lidar, semantic lidar)
+  include_ground_truth: true  # Keep true/estimated ego poses alongside sensor data
+  apply_to_all_cavs: true  # Apply to all CAVs in this scenario
+  max_vehicles: 4          # Record at most 4 vehicles, always including the selected ego
+  ground_truth:
+    detections:
+      enabled: true
+      format: coco_like_per_frame
+      categories: [vehicle, walker]
+      debug_draw: true
+    segmentation:
+      camera:
+        enabled: true
+      lidar:
+        enabled: true
+
+# Ego vehicle selection and ego-only sensors
+ego:
+  selection:
+    mode: random           # one of: first, random, sumo_id, carla_id
+    seed: 11               # used only for mode: random
+    # sumo_id: "4"         # used only for mode: sumo_id
+    # carla_id: 221        # used only for mode: carla_id
+  sensors:
+    - id: ego_front_rgb
+      type: sensor.camera.rgb
+      transform:
+        x: 2.5
+        y: 0.0
+        z: 1.2
+        yaw: 0.0
+      attributes:
+        image_size_x: 1280
+        image_size_y: 720
+        fov: 100
+    - id: ego_lidar_top
+      type: sensor.lidar.ray_cast
+      transform:
+        x: 0.0
+        y: 0.0
+        z: 2.5
+      attributes:
+        channels: 64
+        range: 120
+        points_per_second: 1200000
+        rotation_frequency: 20
+        upper_fov: 10.0
+        lower_fov: -30.0
+
+# Non-ego vehicle sensors (falls back to vehicle_base.sensing.perception if omitted)
+other_vehicles:
+  sensing:
+    perception:
+      camera:
+        visualize: 0
+        num: 1
+        positions:
+          - [2.5, 0.0, 1.2, 0]
+      lidar:
+        visualize: false
+        channels: 16
+        range: 80
+        points_per_second: 300000
+        rotation_frequency: 10
+        upper_fov: 10.0
+        lower_fov: -15.0
+
+# Adversarial attack module configuration (model gradient server + attack campaigns)
+adversarial_attack:
+  enabled: true
+  server:
+    url: "http://localhost:8100"      # Model Gradient Server address
+    timeout_s: 30                     # Per-request HTTP timeout
+  # 3-D LiDAR attacks (point cloud → detection)
+  attacks_3d:
+    - name: "perturbation_second"
+      enabled: true
+      type: perturbation              # PointPerturbation (PGD-L2)
+      model: second
+      epsilon: 0.10                   # L2 ε-ball radius per point (metres)
+      alpha: 0.01                     # PGD step size
+      num_steps: 20                   # PGD iterations
+      lambda_reg: 0.01                # λ — L2 regularisation weight (Eq. 1)
+    # - name: "detachment_second"
+    #   enabled: false
+    #   type: detachment                # PointDetachment (saliency-driven removal)
+    #   model: second
+    #   ratio: 0.10                     # Remove 10% of current raw points total
+    #   num_iters: 10                   # Remove ratio/num_iters each iteration
+    #   saliency: l1                    # Client-side sum(abs(grad)) ranking
+    #   lambda_reg: 0.00
+    # - name: "attachment_second"
+    #   enabled: false
+    #   type: attachment                # PointAttachment (anchor-and-refine)
+    #   model: second
+    #   K: 300
+    #   epsilon: 0.05
+    #   alpha: 0.005
+    #   num_steps: 20
+    #   lambda_reg: 0.01
+  # 2-D image attacks (RGB → segmentation)
+  # attacks_2d:
+  #   - name: "pgd_linf_yolop"
+  #     enabled: true
+  #     type: pgd                       # PGD segmentation attack
+  #     model: yolop
+  #     norm: linf
+  #     epsilon: 0.03137                # 8/255
+  #     alpha: 0.00784                  # 2/255 step
+  #     num_steps: 10
+  #     lambda_reg: 0.00
+  #   - name: "square_yolop"
+  #     enabled: false
+  #     type: square                    # Square Attack (black-box, query-based)
+  #     model: yolop
+  #     epsilon: 0.03137
+  #     max_queries: 1000
+  #     lambda_reg: 0.00
+  # Sensor slot identifiers — which ego sensors to perturb
+  sensor_targets:
+    lidar_sensor_id: "ego_lidar_top"
+    camera_sensor_id: "ego_front_rgb"
+  # Output options — save adversarial data alongside clean recordings
+  output:
+    save_adversarial: true
+    save_clean: true
+    subdir: "adversarial"
+
+# SUMO settings (common across all scenarios)
+sumo:
+  host: 127.0.0.1  # Auto-assigned by OpenCDA if not specified
+  port: 8813  # Auto-assigned by OpenCDA if not specified
+  gui: false  # Set to true to show SUMO GUI
+  client_order: 2
+  sumo_cfg_file: "/home/chranagno/Workspace/repos/simulator_paper/sumo_configs/Town01.sumocfg"
+  
+# Artery configuration (overrides general config if needed)
+# artery:
+#   enabled: true  # Uncomment to override artery settings
+
+# Scenario definition
+scenario:
+  auto_cavs_from_sumo_routes:
+    enabled: true
+    limit: 30
+  # single_cav_list:
+  #   - name: cav1
+  #     spawn_position: [100, 200, 0.3, 0, 0, 0]
+  #     destination: [400, 200, 0.3]
+  #     v2x:
+  #       communication_range: 45
+  #     behavior:
+  #       local_planner:
+  #         debug_trajectory: false
+  #         debug: false
+
+# Optional: CARLA traffic manager settings (for CARLA-only mode)
+# carla_traffic_manager:
+#   num_vehicles: 50
+#   num_walkers: 0
