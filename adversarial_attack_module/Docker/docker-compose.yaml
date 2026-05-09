@@ -1,0 +1,53 @@
+# =========================================================================
+#  Docker Compose — Adversarial Attack Module
+# =========================================================================
+#  Demonstrates the loosely coupled deployment:
+#    model-server  →  GPU node serving gradients via REST
+#    simulator     →  orchestration node running CARLA + attack client
+# =========================================================================
+
+services:
+  # ----- Model Gradient Server (GPU node) --------------------------------
+  model-server:
+    build:
+      context: ..
+      dockerfile: Docker/Dockerfile.model_server
+      args:
+        OPENPCDET_REF: "master"
+        OPENPCDET_BEFORE: "2023-04-01"
+        CUDA_ARCH_LIST: "7.5"
+        INSTALL_YOLOP: "true"
+    ports:
+      - "8100:8100"
+    volumes:
+      - ../model_server:/app/model_server:ro
+      - ../configs:/app/configs:ro
+      - /home/chranagno/Workspace/repos/simulator/adversarial_attack_module/checkpoints:/checkpoints:ro   # mount your model weights
+    environment:
+      - MODEL_CONFIG=/app/configs/models.yaml
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ----- Simulator (could be on a separate node) -------------------------
+  # simulator:
+  #   image: carla-sim:latest
+  #   depends_on:
+  #     model-server:
+  #       condition: service_healthy
+  #   environment:
+  #     - ATTACK_SERVER_URL=http://model-server:8100
+  #   volumes:
+  #     - ./attack_client:/app/attack_client:ro
+  #     - ./configs:/app/configs:ro

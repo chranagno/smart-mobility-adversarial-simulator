@@ -1,0 +1,6 @@
+# Attack Client dependencies (simulator side — no PyTorch needed)
+requests>=2.28.0
+numpy>=1.24.0
+scipy>=1.10.0
+pyyaml>=6.0
+urllib3>=2.0.0

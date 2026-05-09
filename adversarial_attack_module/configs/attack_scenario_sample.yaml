@@ -1,0 +1,119 @@
+# Adversarial Attack Campaign — annotated sample (addresses Reviewer R2-7b)
+#
+# This YAML is loaded by AttackOrchestrator at simulation start.
+# Each campaign entry defines which sensor modality to attack, which model,
+# which algorithm, and the full hyper-parameter set (including λ as required
+# by Reviewer R2-6).
+
+campaign_name: "carla_town01_adversarial"
+
+# Model server connection
+server:
+  url: "http://localhost:8100"
+  timeout_s: 30
+
+# ──────────────────────────────────────────────────────────
+# 3-D LiDAR attacks (point cloud → detection)
+# ──────────────────────────────────────────────────────────
+attacks_3d:
+
+  - name: "perturbation_second"
+    enabled: true
+    type: perturbation           # PointPerturbation (PGD-L2)
+    model: second
+    # Hyper-parameters (λ is Eq. 1 regulariser in the paper)
+    epsilon: 0.10                # L2 ε-ball radius per point (metres)
+    alpha: 0.01                  # PGD step size
+    num_steps: 20                # PGD iterations
+    lambda_reg: 0.01             # λ — L2 regularisation weight
+
+  - name: "detachment_second"
+    enabled: true
+    type: detachment             # PointDetachment (saliency-driven removal)
+    model: second
+    ratio: 0.10                  # remove 10% of current raw points total
+    num_iters: 10                # remove ratio/num_iters each iteration
+    saliency: l1                 # "l1" = sum(abs(grad)), "l2" = ||grad||
+    lambda_reg: 0.00             # λ — not used for detachment (kept explicit)
+
+  - name: "attachment_second"
+    enabled: false
+    type: attachment             # PointAttachment (anchor-and-refine)
+    model: second
+    K: 300                       # number of synthetic points to inject
+    epsilon: 0.05                # PGD ε for refinement
+    alpha: 0.005
+    num_steps: 20
+    lambda_reg: 0.01             # λ
+
+  - name: "perturbation_pointpillars"
+    enabled: false
+    type: perturbation
+    model: pointpillars
+    epsilon: 0.10
+    alpha: 0.01
+    num_steps: 20
+    lambda_reg: 0.01
+
+  - name: "perturbation_centerpoint"
+    enabled: false
+    type: perturbation
+    model: centerpoint
+    epsilon: 0.10
+    alpha: 0.01
+    num_steps: 20
+    lambda_reg: 0.01
+
+# ──────────────────────────────────────────────────────────
+# 2-D image attacks (RGB → segmentation)
+# ──────────────────────────────────────────────────────────
+attacks_2d:
+
+  - name: "pgd_linf_yolop"
+    enabled: true
+    type: pgd                    # PGD segmentation attack
+    model: yolop
+    attack_mode: seg_both        # seg_drivable | seg_lane | seg_both
+    norm: linf                   # "linf" or "l2"
+    epsilon: 0.03137             # 8/255
+    alpha: 0.00784               # 2/255 step
+    num_steps: 10
+    random_start: true
+    targeted: false
+    lambda_reg: 0.00             # λ — not used for PGD-L∞ (kept explicit)
+
+  - name: "pgd_l2_yolop"
+    enabled: false
+    type: pgd
+    model: yolop
+    attack_mode: seg_both
+    norm: l2
+    epsilon: 15.0                # L2 ε in pixel space (0-255 range)
+    alpha: 1.5
+    num_steps: 20
+    random_start: true
+    targeted: false
+    lambda_reg: 0.00
+
+  - name: "square_yolop"
+    enabled: false
+    type: square                 # Square Attack (black-box, query-based)
+    model: yolop
+    attack_mode: seg_both
+    epsilon: 0.03137             # 8/255
+    max_queries: 1000
+    p_init: 0.8
+    lambda_reg: 0.00             # λ — not applicable (kept explicit)
+
+# ──────────────────────────────────────────────────────────
+# Sensor selector — which sensor slot to attack
+# ──────────────────────────────────────────────────────────
+sensor_targets:
+  lidar_sensor_id: "lidar_top"          # EgoSensorManager slot id for LiDAR
+  camera_sensor_id: "rgb_front"         # EgoSensorManager slot id for RGB
+
+# Output
+output:
+  save_adversarial: true                # write adv. point clouds / images to disk
+  save_clean: true                      # also keep clean copy for comparison
+  subdir: "adversarial"                 # subfolder under recorder base_dir

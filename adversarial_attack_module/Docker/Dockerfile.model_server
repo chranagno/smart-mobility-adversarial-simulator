@@ -1,0 +1,78 @@
+FROM djiajun1206/pcdet:pytorch1.6
+
+WORKDIR /app
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    FORCE_CUDA=1 \
+    PYTHONUNBUFFERED=1
+
+SHELL ["/bin/bash", "-lc"]
+
+# System deps needed by FastAPI health checks and OpenCV. The base image has
+# an old Ubuntu 18.04 NVIDIA apt source with stale signing keys, so disable
+# those repo lines before apt-get update.
+RUN set -eux; \
+    grep -rl "developer.download.nvidia.com" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null \
+        | xargs -r sed -i 's|^[[:space:]]*deb https://developer.download.nvidia.com/|# deb https://developer.download.nvidia.com/|'; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        curl \
+        git \
+        libgl1 \
+        libglib2.0-0; \
+    rm -rf /var/lib/apt/lists/*
+
+# Python API deps. Keep these Python-3.7/3.8 compatible for older OpenPCDet
+# images based on PyTorch 1.6.
+COPY requirements_server.txt .
+RUN python -m pip install --upgrade "pip<24" "setuptools<60" wheel && \
+    python -m pip install -r requirements_server.txt
+
+# Install OpenPCDet as a model dependency outside /app. The /app directory is
+# reserved for the gradient server code and configs.
+ARG OPENPCDET_REPO=https://github.com/open-mmlab/OpenPCDet.git
+ARG OPENPCDET_REF=master
+ARG OPENPCDET_BEFORE=2023-04-01
+ARG CUDA_ARCH_LIST="7.5"
+ENV TORCH_CUDA_ARCH_LIST=${CUDA_ARCH_LIST}
+ENV PYTHONPATH=/app/model_server:/opt/openpcdet:/opt/yolop
+
+RUN git clone --branch "$OPENPCDET_REF" "$OPENPCDET_REPO" /opt/openpcdet && \
+    cd /opt/openpcdet && \
+    git checkout "$(git rev-list -n 1 --before="$OPENPCDET_BEFORE" HEAD)"
+WORKDIR /opt/openpcdet
+RUN python -c "from pathlib import Path; p = Path('pcdet/utils/spconv_utils.py'); s = p.read_text(); p.write_text(s.replace(\"if float(spconv.__version__[2:]) >= 2.2:\", \"if hasattr(spconv, '__version__') and float(spconv.__version__[2:]) >= 2.2:\"))"
+RUN TORCH_CUDA_ARCH_LIST="$TORCH_CUDA_ARCH_LIST" python setup.py develop
+RUN python -m pip uninstall -y opencv-python opencv-python-headless opencv-contrib-python opencv-contrib-python-headless || true && \
+    python -c "import glob, shutil, site; paths = site.getsitepackages(); [shutil.rmtree(p, ignore_errors=True) for root in paths for p in glob.glob(root + '/cv2*') + glob.glob(root + '/opencv*dist-info') + glob.glob(root + '/opencv*egg-info')]" && \
+    python -m pip install --no-deps --force-reinstall opencv-python-headless==4.5.5.64 && \
+    python -c "import cv2; print('OpenCV import OK before OpenPCDet validation', cv2.__version__, cv2.__file__)"
+RUN python -c "from pcdet.config import cfg, cfg_from_yaml_file; from pcdet.models import build_network; print('OpenPCDet import OK')"
+
+WORKDIR /app
+
+ARG INSTALL_YOLOP=false
+RUN if [ "$INSTALL_YOLOP" = "true" ]; then \
+        git clone --depth 1 https://github.com/hustvl/YOLOP.git /opt/yolop && \
+        grep -Ev '^(torch|torchvision|torchaudio|opencv-python|opencv-python-headless)([<=> ]|$)' /opt/yolop/requirements.txt > /tmp/yolop-requirements.txt && \
+        python -m pip install -r /tmp/yolop-requirements.txt ; \
+    fi
+
+# The old conda base can retain mismatched cv2 Python files and binary
+# extensions. Remove every cv2/opencv wheel artifact, then install one headless
+# OpenCV version that works with Python 3.7.
+RUN python -m pip uninstall -y opencv-python opencv-python-headless opencv-contrib-python opencv-contrib-python-headless || true && \
+    python -c "import glob, shutil, site; paths = site.getsitepackages(); [shutil.rmtree(p, ignore_errors=True) for root in paths for p in glob.glob(root + '/cv2*') + glob.glob(root + '/opencv*dist-info') + glob.glob(root + '/opencv*egg-info')]" && \
+    python -m pip install --no-deps --force-reinstall opencv-python-headless==4.5.5.64 && \
+    python -c "import cv2; print('OpenCV import OK', cv2.__version__, cv2.__file__)"
+
+COPY model_server/ /app/model_server/
+COPY configs/ /app/configs/
+
+ENV MODEL_CONFIG=/app/configs/models.yaml
+
+EXPOSE 8100
+
+CMD ["python", "model_server/server.py"]

@@ -1,0 +1,37 @@
+# Model server configuration
+# Set checkpoint and config paths to your trained OpenPCDet / YOLOP checkpoints.
+# family: openpcdet  ->  SECOND / PointPillars / CenterPoint
+# family: yolop      ->  YOLOP drivable-area + lane-line segmentation
+# family: stub       ->  synthetic data (no GPU / model files required)
+
+server:
+  host: "0.0.0.0"
+  port: 8100
+  log_level: "info"
+
+models:
+  second:
+    family: openpcdet
+    config_path: "/checkpoints/second/second.yaml"
+    checkpoint_path: "/checkpoints/second/second.pth"
+    device: "cuda:0"
+
+  pointpillars:
+    family: openpcdet
+    config_path: "/checkpoints/pointpillars/pointpillar_custom.yaml"
+    checkpoint_path: "/checkpoints/pointpillars/pointpillar.pth"
+    device: "cuda:0"
+
+  centerpoint:
+    family: openpcdet
+    config_path: "/checkpoints/centerpoint/centerpoint.yaml"
+    checkpoint_path: "/checkpoints/centerpoint/centerpoint.pth"
+    device: "cuda:0"
+
+  yolop:
+    family: yolop
+    checkpoint_path: "/checkpoints/yolop/yolop.pth"
+    device: "cuda:0"
+    input_size: [640, 640]   # [H, W] expected by YOLOP
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
