@@ -310,8 +310,8 @@ class AttackOrchestrator:
             attack_type: ``"pgd"`` or ``"square"``.
             model_name: Registered model name (e.g. ``"yolop"``).
             image: Clean (H, W, 3) float32 image with values in [0, 1].
-            da_mask: Optional drivable-area target mask for Ioulia segmentation losses.
-            ll_mask: Optional lane-line target mask for Ioulia segmentation losses.
+            da_mask: Optional drivable-area target mask for segmentation losses.
+            ll_mask: Optional lane-line target mask for segmentation losses.
             **kwargs: Override any config dataclass field.
 
         Returns:

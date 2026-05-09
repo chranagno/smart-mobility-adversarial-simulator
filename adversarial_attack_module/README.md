@@ -27,13 +27,13 @@ Model / gradient server
 
 ## Implemented Attacks
 
-| Attack | Runtime class | Reference |
-| --- | --- | --- |
-| LiDAR perturbation | `attack_client/attacks_3d.py::PointPerturbationAttack` | `ioulia_attacks/attack_custom.py` |
-| LiDAR detachment | `attack_client/attacks_3d.py::PointDetachmentAttack` | `ioulia_attacks/remove_custom (1).py` |
-| LiDAR attachment | `attack_client/attacks_3d.py::PointAttachmentAttack` | `ioulia_attacks/attach_custom.py` |
-| Segmentation PGD | `attack_client/attacks_2d.py::PGDSegmentationAttack` | `ioulia_attacks/pgd_only_seg_losses.py` |
-| Segmentation Square | `attack_client/attacks_2d.py::SquareAttack` | `ioulia_attacks/seg_square.py` |
+| Attack | Runtime class |
+| --- | --- |
+| LiDAR perturbation | `attack_client/attacks_3d.py::PointPerturbationAttack` |
+| LiDAR detachment | `attack_client/attacks_3d.py::PointDetachmentAttack` |
+| LiDAR attachment | `attack_client/attacks_3d.py::PointAttachmentAttack` |
+| Segmentation PGD | `attack_client/attacks_2d.py::PGDSegmentationAttack` |
+| Segmentation Square | `attack_client/attacks_2d.py::SquareAttack` |
 
 3-D attacks currently use `second` successfully. `pointpillars` needs a
 checkpoint/YAML with matching class heads. `yolop.pth` must be a real PyTorch

@@ -633,7 +633,7 @@ class YOLOPModel(BaseModel):
         pred: "Optional[torch.Tensor]",
         target: Optional[np.ndarray],
     ) -> "torch.Tensor":
-        """Ioulia-style YOLOP segmentation loss for one head.
+        """YOLOP segmentation loss for one head.
 
         The original scripts use YOLOP's BCE segmentation criterion.  Some
         checkpoints expose a single-channel head, others expose two logits.

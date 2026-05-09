@@ -6,11 +6,11 @@ No PyTorch is imported — only numpy and scipy are used.
 
 Algorithms
 ----------
-* PGDSegmentationAttack — Ioulia PGD under L∞ or L2 constraint.
+* PGDSegmentationAttack — PGD under L∞ or L2 constraint.
   * L∞: δ = clip(δ + α·sign(∇_x L), −ε, +ε)
   * L2:  δ = project(δ + α·∇_x L / ||∇_x L||, ε)
 
-* SquareAttack — Ioulia YOLOP segmentation Square Attack.
+* SquareAttack — YOLOP segmentation Square Attack.
   Random square patches are accepted when they increase the segmentation
   loss; the run succeeds once adversarial loss reaches/exceeds clean loss.
 """
@@ -84,11 +84,10 @@ class SquareAttackConfig:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class PGDSegmentationAttack:
-    """Ioulia PGD attack on YOLOP segmentation under L∞ or L2 constraint.
+    """PGD attack on YOLOP segmentation under L∞ or L2 constraint.
 
     The model-specific YOLOP BCE segmentation loss is computed by the gradient
     server.  This client performs only the input-space update/projection loop
-    from ``ioulia_attacks/pgd_only_seg_losses.py``.
 
     Args:
         cfg: Attack hyper-parameters.
@@ -162,7 +161,7 @@ class PGDSegmentationAttack:
         final_delta = adv - clean
         info = {
             "attack": "pgd",
-            "implementation": "ioulia_seg_pgd",
+            "implementation": "seg_pgd",
             "norm": cfg.norm,
             "model": model_name,
             "attack_mode": cfg.attack_mode,
@@ -188,11 +187,10 @@ class PGDSegmentationAttack:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class SquareAttack:
-    """Ioulia black-box Square Attack on YOLOP segmentation.
+    """Black-box Square Attack on YOLOP segmentation.
 
-    This ports the query schedule and clean-loss margin criterion from
-    ``ioulia_attacks/seg_square.py`` while keeping model/loss computation on
-    the server. No gradient information is requested.
+    This uses a query schedule and clean-loss margin criterion while keeping
+    model/loss computation on the server. No gradient information is requested.
 
     Reference: Andriushchenko et al., ECCV 2020.
 
@@ -209,7 +207,7 @@ class SquareAttack:
 
     @staticmethod
     def _p_selection(it: int, n_queries: int, p_init: float) -> float:
-        """Ioulia/AutoAttack square-size schedule."""
+        """Square-size schedule."""
         if n_queries < 10000:
             it = int(it / max(n_queries, 1) * 10000)
         if 10 < it <= 50:
@@ -267,7 +265,7 @@ class SquareAttack:
             attack_mode=cfg.attack_mode,
         )
 
-        # Ioulia initialisation: random +/- eps vertical signs across width.
+        # Random +/- eps vertical signs across width.
         random_sign = rng.choice([-1.0, 1.0], size=(1, W, C)).astype(np.float32)
         adv = np.clip(clean + eps * random_sign, 0.0, 1.0)
         current_loss = client.get_2d_query_loss(
@@ -314,7 +312,7 @@ class SquareAttack:
 
         info = {
             "attack": "square",
-            "implementation": "ioulia_seg_square",
+            "implementation": "seg_square",
             "model": model_name,
             "attack_mode": cfg.attack_mode,
             "has_da_mask": da_mask is not None,

@@ -157,7 +157,7 @@ class PointPerturbationAttack:
         adv[:, :3] += delta
         info = {
             "attack": "perturbation",
-            "implementation": "ioulia_lidar_perturbation",
+            "implementation": "lidar_perturbation",
             "model": model_name,
             "loss_trace": loss_trace,
             "final_loss": loss_trace[-1] if loss_trace else None,
@@ -250,7 +250,7 @@ class PointDetachmentAttack:
 
         info = {
             "attack": "detachment",
-            "implementation": "ioulia_lidar_detachment",
+            "implementation": "lidar_detachment",
             "model": model_name,
             "method": "gradient_oracle_point_removal",
             "saliency": saliency_mode,
@@ -349,7 +349,7 @@ class PointAttachmentAttack:
         adv = np.vstack([points, synthetic])
         info = {
             "attack": "attachment",
-            "implementation": "ioulia_lidar_attachment",
+            "implementation": "lidar_attachment",
             "model": model_name,
             "loss_trace": loss_trace,
             "final_loss": loss_trace[-1] if loss_trace else None,
