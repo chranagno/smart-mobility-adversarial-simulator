@@ -68,7 +68,7 @@ recording:
 # Ego vehicle selection and ego-only sensors
 ego:
   selection:
-    mode: random           # one of: first, random, sumo_id, carla_id
+    mode: first           # one of: first, random, sumo_id, carla_id
     seed: 11               # used only for mode: random
     # sumo_id: "4"         # used only for mode: sumo_id
     # carla_id: 221        # used only for mode: carla_id
@@ -130,7 +130,7 @@ adversarial_attack:
       model: second
       epsilon: 0.10                   # L2 ε-ball radius per point (metres)
       alpha: 0.01                     # PGD step size
-      num_steps: 20                   # PGD iterations
+      num_steps: 3               # PGD iterations
       lambda_reg: 0.01                # λ — L2 regularisation weight (Eq. 1)
     # - name: "detachment_second"
     #   enabled: false

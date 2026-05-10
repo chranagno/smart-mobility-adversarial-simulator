@@ -1,0 +1,1 @@
+add_opp_run(integrated-simulator CONFIG omnetpp.ini)

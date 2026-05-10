@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package artery.traci;
+
+// Request messages
+message StepRequest {
+    uint32 count = 1;  // number of steps (default: 1)
+}
+
+message GetTimeRequest {
+}
+
+message GetStatusRequest {
+}
+
+message GetVehiclesRequest {
+}
+
+message GetVehicleInfoRequest {
+    string vehicle_id = 1;
+}
+
+// Response messages
+message StepResponse {
+    bool success = 1;
+    double current_time = 2;
+    string error = 3;
+}
+
+message GetTimeResponse {
+    double time = 1;
+}
+
+message GetStatusResponse {
+    bool connected = 1;
+    double time = 2;
+    double step_interval = 3;
+    uint32 vehicle_count = 4;
+}
+
+message GetVehiclesResponse {
+    repeated string vehicle_ids = 1;
+}
+
+message GetVehicleInfoResponse {
+    string vehicle_id = 1;
+    double position_x = 2;
+    double position_y = 3;
+    double speed = 4;
+    double angle = 5;
+    string road_id = 6;
+    int32 lane_index = 7;
+}
+
+// Main message wrapper
+message ControlRequest {
+    oneof request {
+        StepRequest step = 1;
+        GetTimeRequest get_time = 2;
+        GetStatusRequest get_status = 3;
+        GetVehiclesRequest get_vehicles = 4;
+        GetVehicleInfoRequest get_vehicle_info = 5;
+    }
+}
+
+message ControlResponse {
+    oneof response {
+        StepResponse step = 1;
+        GetTimeResponse get_time = 2;
+        GetStatusResponse get_status = 3;
+        GetVehiclesResponse get_vehicles = 4;
+        GetVehicleInfoResponse get_vehicle_info = 5;
+    }
+}
+

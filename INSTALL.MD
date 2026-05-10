@@ -31,7 +31,7 @@ If your Node.js version is older than 18, install a newer Node.js release before
 This repository is configured for CARLA 0.9.15. Use an installation outside this repository, for example:
 
 ```text
-/path/to/CARLA_0.9.15/LinuxNoEditor
+$HOME/simulators/CARLA_0.9.15/LinuxNoEditor
 ```
 
 That directory must contain:
@@ -46,7 +46,8 @@ PythonAPI/carla/dist/carla-0.9.15-py3.8-linux-x86_64.egg
 Download the CARLA 0.9.15 Linux package and extract it outside this repository, for example:
 
 ```bash
-cd /path/to/download_location
+mkdir -p "$HOME/simulators"
+cd "$HOME/simulators"
 
 # Put the CARLA 0.9.15 Linux tarball here, then extract it.
 tar -xzf CARLA_0.9.15.tar.gz
@@ -62,7 +63,7 @@ If your extracted directory name differs, that is fine. Use the real path in `co
 Set `CARLA_HOME` to the CARLA `LinuxNoEditor` directory:
 
 ```bash
-export CARLA_HOME="/path/to/CARLA_0.9.15/LinuxNoEditor"
+export CARLA_HOME="$HOME/simulators/CARLA_0.9.15/LinuxNoEditor"
 export PYTHONPATH="$CARLA_HOME/PythonAPI/carla/dist/carla-0.9.15-py3.8-linux-x86_64.egg:$CARLA_HOME/PythonAPI/carla:$PYTHONPATH"
 ```
 
@@ -143,7 +144,7 @@ Start CARLA first, then run:
 ```bash
 cd /path/to/simulator
 
-export CARLA_HOME="/path/to/CARLA_0.9.15/LinuxNoEditor"
+export CARLA_HOME="$HOME/simulators/CARLA_0.9.15/LinuxNoEditor"
 export PYTHONPATH="$CARLA_HOME/PythonAPI/carla/dist/carla-0.9.15-py3.8-linux-x86_64.egg:$CARLA_HOME/PythonAPI/carla:$PYTHONPATH"
 
 python3 scripts/export_opendrive.py Town01 --output-dir sumo_configs
@@ -180,9 +181,9 @@ For CARLA/SUMO co-simulation with Artery enabled, keep `sumo.num_clients: 2` in 
 Artery requires OMNeT++. A typical layout is:
 
 ```text
-OMNeT++: /path/to/omnetpp-5.7.1
-Artery: /path/to/artery
-Artery build: /path/to/artery/build
+OMNeT++: $HOME/omnetpp-5.7.1
+Artery: $HOME/src/artery
+Artery build: $HOME/src/artery/build
 Upstream: https://github.com/riebl/artery.git
 Local base commit: 51a00eb5
 ```
@@ -194,7 +195,7 @@ This local Artery tree also contains project-specific ExternalControl changes. F
 Download the OMNeT++ 5.7.1 source archive, then build it:
 
 ```bash
-cd /path/to/install_location
+cd ~
 tar -xzf omnetpp-5.7.1-src-linux.tgz
 cd omnetpp-5.7.1
 
@@ -206,14 +207,14 @@ make -j"$(nproc)"
 Add OMNeT++ to your shell startup:
 
 ```bash
-echo 'export OMNETPP_ROOT="/path/to/omnetpp-5.7.1"' >> ~/.bashrc
+echo 'export OMNETPP_ROOT="$HOME/omnetpp-5.7.1"' >> ~/.bashrc
 echo 'source "$OMNETPP_ROOT/setenv"' >> ~/.bashrc
 ```
 
 Validate OMNeT++:
 
 ```bash
-source /path/to/omnetpp-5.7.1/setenv
+source ~/omnetpp-5.7.1/setenv
 opp_run -h | head
 ```
 
@@ -222,7 +223,8 @@ opp_run -h | head
 Clone Artery outside this repository:
 
 ```bash
-cd /path/to/install_location
+mkdir -p "$HOME/src"
+cd "$HOME/src"
 git clone --recurse-submodules https://github.com/riebl/artery.git
 cd artery
 
@@ -234,8 +236,8 @@ git submodule update --init --recursive
 Build with OMNeT++ on the path:
 
 ```bash
-source /path/to/omnetpp-5.7.1/setenv
-cd /path/to/artery
+source ~/omnetpp-5.7.1/setenv
+cd "$HOME/src/artery"
 
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRUN_FLAGS="-u Cmdenv"
 cmake --build build -j"$(nproc)"
@@ -244,7 +246,7 @@ cmake --build build -j"$(nproc)"
 Validate the Artery build:
 
 ```bash
-cd /path/to/artery
+cd "$HOME/src/artery"
 cmake --build build --target run_integrated-simulator
 ```
 
@@ -294,34 +296,4 @@ Install Node dependencies:
 npm install
 npm install --prefix frontend/server
 npm install --prefix frontend/client
-```
-
-## 6. End-to-End Validation
-
-Start the frontend only:
-
-```bash
-./start.sh --frontend-only
-```
-
-Start services with a scenario:
-
-```bash
-./start.sh --services-only --scenario scenarios/Town01_sumo_2.yaml
-```
-
-Check service status and logs:
-
-```bash
-pm2 status
-pm2 logs carla-headless
-pm2 logs sumo-server
-pm2 logs artery
-pm2 logs sync-simulators
-```
-
-Stop everything:
-
-```bash
-./stop.sh
 ```

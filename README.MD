@@ -56,9 +56,8 @@ Edit `config/global.config.yaml` with your installation paths:
 ```yaml
 carla:
   installation_path: "/path/to/carla/LinuxNoEditor"
-  python_api_path: "/path/to/carla/LinuxNoEditor"
-  scenario_runner_path: "/path/to/scenario_runner"
-  scenario_runner_executable: "/path/to/scenario_runner/scenario_runner.py"
+  python_api_path: "/path/to/carla/PythonAPI"
+
 
 sumo:
   installation_path: "/usr/share/sumo"
@@ -71,7 +70,6 @@ artery:
   build_path: "/path/to/artery/build"
 ```
 
-See [config/README.md](config/README.md) for details.
 
 ### 3. Start Everything
 
@@ -128,68 +126,28 @@ pm2 logs       # View service logs
 ```
 **How It Works:**
 - SUMO runs as a separate TraCI server
-- Artery (if enabled) connects to SUMO with **client order 1** (controls simulation step)
-- Sync script connects to SUMO with **client order 2** (follows Artery)
+- Artery  connects to SUMO with  (controls simulation step)
+- Sync script connects to SUMO with  (follows Artery)
 - Vehicles, traffic lights, and state synchronized between all simulators
 - **Artery drives the simulation timing** via TraCI
 
 ---
 
-### Mode 2: Carla Scenario Runner
-
-Run OpenSCENARIO files with synchronized SUMO background traffic and Artery V2X.
-
-**Configuration:**
-```yaml
-mode: "carla_scenario"
-
-carla:
-  town: "Town01"
-  port: 2000
-
-scenario_runner:
-  scenario_file: "scenario_runner/examples/LaneChangeSimple.xosc"
-  timeout: 300
-  output_dir: "./scenario_results"
-
-sumo:
-  enabled: true
-  config: "sumo_configs/Town01.sumocfg"
-  port: 8813
-  num_clients: 2
-
-artery:
-  enabled: true
-  ini_path: "/path/to/artery/omnetpp.ini"
-
-sync:
-  enabled: true
-  step_length: 0.05
-  tls_manager: "carla"
-```
-
-**Services Started:**
-1. `carla-headless` - CARLA simulator server
-2. `scenario-runner` - Loads OpenSCENARIO scenario
-3. `sumo-server` - SUMO background traffic with TraCI
-4. `sync-simulators` - Synchronization bridge (connects to SUMO, starts Artery)
-5. `image-capture` - BEV camera service
-
-**How It Works:**
-- Scenario Runner loads and executes OpenSCENARIO file
-- SUMO provides synchronized background traffic
-- Artery enables V2X communication between scenario and background vehicles
-- **Artery controls simulation stepping** for realistic V2X timing
-
----
-
 ## Synchronization Architecture
 
-The platform uses a **sync-centric architecture** where `sync_simulators.py` acts as the bridge between CARLA, SUMO, and Artery.
+The platform uses a **sync-centric architecture** where `orchestrator.py` acts as the bridge between CARLA, SUMO, Artery, and the Adversarial Attack Module.
 
 ### Architecture Overview
 
-```
+```text
+                                        ┌───────────────┐
+                                        │  Adversarial  │
+                                        │ Attack Server │
+                                        │  (REST API)   │
+                                        └───────────────┘
+                                                ▲
+                                                │ HTTP Calls
+                                                ▼
 ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
 │   CARLA     │◄────────┤    Sync     │────────►│    SUMO     │
 │  Simulator  │  Sync   │   Script    │  TraCI  │   Server    │
@@ -211,6 +169,7 @@ The platform uses a **sync-centric architecture** where `sync_simulators.py` act
 - Sync script connects to CARLA and SUMO
 - Sync script optionally starts Artery subprocess
 - Artery connects to SUMO via TraCI
+- Sync script connects to the Adversarial Attack Server via REST
 
 **2. TraCI Client Order:**
 - **Artery**: Client order = 1 (configured in `sumo-omnetpp-med.ini`)
@@ -218,7 +177,7 @@ The platform uses a **sync-centric architecture** where `sync_simulators.py` act
 - Lower order executes first → **Artery controls simulation step**
 
 **3. Simulation Loop:**
-```
+```text
 Each simulation step (default: 0.05s):
 1. SUMO waits for all TraCI clients
 2. Artery executes first (order=1)
@@ -228,6 +187,7 @@ Each simulation step (default: 0.05s):
    - Syncs CARLA vehicles → SUMO
    - Syncs SUMO vehicles → CARLA
    - Syncs traffic lights
+   - Collects ego sensor data and runs adversarial attacks via REST API
 4. SUMO advances simulation
 5. Repeat
 ```
@@ -237,6 +197,19 @@ Each simulation step (default: 0.05s):
 - Traffic light states
 - Vehicle spawning/despawning
 - Optional: Vehicle lights and colors
+
+---
+
+## Adversarial Attack Module
+
+This platform includes a decoupled module for generating and evaluating adversarial perception attacks. It runs side-by-side with the co-simulation, keeping the simulation environment separate from model inference and gradient computation.
+
+**Key Features:**
+- **REST-based Architecture:** The simulator communicates with a separate FastAPI model server via HTTP, passing sensor arrays and retrieving gradients, scalar losses, or inference outputs.
+- **Implemented Attacks:** Supports 3D LiDAR attacks (Perturbation, Detachment, Attachment) and 2D Segmentation attacks (PGD, Square).
+- **Decoupled Environment:** Model-specific dependencies like PyTorch, OpenPCDet, and YOLOP are isolated in the `model_server` Docker container.
+
+For detailed instructions on architecture, supported attacks, and how to run the model server, please refer to the [Adversarial Attack Module README](adversarial_attack_module/README.md).
 
 ### Configuration Files
 
