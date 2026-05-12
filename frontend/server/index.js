@@ -2,15 +2,34 @@ const express = require('express');
 const cors = require('cors');
 const WebSocket = require('ws');
 const http = require('http');
+const net = require('net');
 const pm2 = require('pm2');
 const fs = require('fs');
 const yaml = require('js-yaml');
 const path = require('path');
+const os = require('os');
 const { exec, spawn } = require('child_process');
 const util = require('util');
 const multer = require('multer');
 
 const execPromise = util.promisify(exec);
+const PROJECT_ROOT = path.resolve(__dirname, '../..');
+
+function loadGlobalConfig() {
+    const globalConfigPath = path.join(PROJECT_ROOT, 'config', 'global.config.yaml');
+    if (!fs.existsSync(globalConfigPath)) {
+        return {};
+    }
+
+    try {
+        return yaml.load(fs.readFileSync(globalConfigPath, 'utf8')) || {};
+    } catch (error) {
+        console.warn(`[Server] Could not read global config: ${error.message}`);
+        return {};
+    }
+}
+
+const globalConfig = loadGlobalConfig();
 
 // Import SimulationManager
 const SimulationManager = require('./simulation-manager');
@@ -27,7 +46,7 @@ const HOST = process.env.HOST || process.env.BACKEND_HOST || '0.0.0.0';
 
 // Create singleton SimulationManager instance
 const simulationManager = new SimulationManager({
-    statusFile: path.join(__dirname, '../../.scenario_status.json'),
+    statusFile: path.join(PROJECT_ROOT, '.scenario_status.json'),
     configLauncherUrl: 'http://127.0.0.1:5001'
 });
 
@@ -828,11 +847,152 @@ app.post('/api/simulation/stopRecording', async (req, res) => {
 // Teleoperation process tracking
 const teleoperationProcesses = new Map();
 
+function isLoopbackHostname(hostname) {
+    if (!hostname) return false;
+    const normalized = hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
+    return normalized === 'localhost' ||
+        normalized === '::1' ||
+        normalized === '0:0:0:0:0:0:0:1' ||
+        normalized === '127.0.0.1' ||
+        /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(normalized);
+}
+
+function isLoopbackAddress(address) {
+    if (!address) return false;
+    const normalized = address.replace(/^::ffff:/, '');
+    return isLoopbackHostname(normalized);
+}
+
+function getOriginHostname(req) {
+    const origin = req.get('origin') || req.get('referer');
+    if (!origin) return null;
+
+    try {
+        return new URL(origin).hostname;
+    } catch (_) {
+        return null;
+    }
+}
+
+function isLocalTeleoperationRequest(req) {
+    const originHostname = getOriginHostname(req);
+    if (originHostname && !isLoopbackHostname(originHostname)) {
+        return false;
+    }
+
+    const forwardedFor = req.get('x-forwarded-for');
+    if (forwardedFor) {
+        const firstForwardedAddress = forwardedFor.split(',')[0].trim();
+        if (!isLoopbackAddress(firstForwardedAddress)) {
+            return false;
+        }
+    }
+
+    return isLoopbackAddress(req.socket?.remoteAddress) || isLoopbackAddress(req.ip);
+}
+
+function findCarlaEggs(carlaHome) {
+    const searchDirs = [
+        carlaHome && path.join(carlaHome, 'PythonAPI', 'carla', 'dist'),
+        carlaHome && path.join(carlaHome, 'carla', 'dist'),
+        path.resolve(PROJECT_ROOT, '..', 'carla', 'dist'),
+        path.resolve(PROJECT_ROOT, '..', 'carla', 'PythonAPI', 'carla', 'dist')
+    ].filter(Boolean);
+
+    const eggs = [];
+    for (const searchDir of searchDirs) {
+        if (!fs.existsSync(searchDir)) continue;
+        for (const file of fs.readdirSync(searchDir)) {
+            if (file.startsWith('carla-') && file.endsWith('.egg')) {
+                eggs.push(path.join(searchDir, file));
+            }
+        }
+    }
+    return eggs;
+}
+
+function buildTeleoperationEnv() {
+    const carlaConfig = globalConfig.carla || {};
+    const carlaHome = process.env.CARLA_HOME || carlaConfig.python_api_path || carlaConfig.installation_path || '';
+    const fallbackDisplay = fs.existsSync('/tmp/.X11-unix/X0') ? ':0' : '';
+    const fallbackRuntimeDir = `/run/user/${process.getuid ? process.getuid() : 1000}`;
+    const fallbackXauthority = path.join(os.homedir(), '.Xauthority');
+    const pythonPaths = [
+        path.join(PROJECT_ROOT, 'src'),
+        carlaHome,
+        ...findCarlaEggs(carlaHome),
+        process.env.PYTHONPATH
+    ].filter(Boolean);
+
+    return {
+        ...process.env,
+        CARLA_HOME: carlaHome,
+        DISPLAY: process.env.DISPLAY || fallbackDisplay,
+        XAUTHORITY: process.env.XAUTHORITY || (fs.existsSync(fallbackXauthority) ? fallbackXauthority : ''),
+        XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR || (fs.existsSync(fallbackRuntimeDir) ? fallbackRuntimeDir : ''),
+        XDG_SESSION_TYPE: process.env.XDG_SESSION_TYPE || (fallbackDisplay ? 'x11' : ''),
+        PYTHONPATH: pythonPaths.join(path.delimiter)
+    };
+}
+
+function resolveTeleoperationPython() {
+    const explicitPython = process.env.TELEOPERATION_PYTHON || process.env.CARLA_PYTHON;
+    if (explicitPython) {
+        if (path.isAbsolute(explicitPython) && !fs.existsSync(explicitPython)) {
+            throw new Error(`Configured teleoperation Python does not exist: ${explicitPython}`);
+        }
+        return explicitPython;
+    }
+
+    const candidates = [
+        path.join(os.homedir(), 'anaconda3', 'envs', 'carla', 'bin', 'python'),
+        path.join(os.homedir(), 'miniconda3', 'envs', 'carla', 'bin', 'python'),
+        'python3'
+    ];
+
+    return candidates.find(candidate => !path.isAbsolute(candidate) || fs.existsSync(candidate));
+}
+
+function canConnectToPort(host, port, timeoutMs = 1000) {
+    return new Promise((resolve) => {
+        const socket = net.createConnection({ host, port });
+        let settled = false;
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            socket.destroy();
+            resolve(result);
+        };
+
+        socket.setTimeout(timeoutMs);
+        socket.on('connect', () => finish(true));
+        socket.on('timeout', () => finish(false));
+        socket.on('error', () => finish(false));
+    });
+}
+
 // Start teleoperation GUI
 app.post('/api/teleoperation/start', async (req, res) => {
     const { vehicleId, host = '127.0.0.1', port = 2000 } = req.body;
+    const observeOnly = req.body.observeOnly !== undefined ? Boolean(req.body.observeOnly) : !vehicleId;
     
     try {
+        if (!isLocalTeleoperationRequest(req)) {
+            return res.status(403).json({
+                success: false,
+                error: 'Teleoperation can only be launched from the local machine. Open the UI at http://localhost:5173.'
+            });
+        }
+
+        const carlaReachable = await canConnectToPort(host, Number(port));
+        if (!carlaReachable) {
+            return res.status(503).json({
+                success: false,
+                error: `CARLA is not reachable at ${host}:${port}. Start CARLA or load a scenario before launching teleoperation.`
+            });
+        }
+
         // Check if teleoperation is already running
         if (teleoperationProcesses.has('current')) {
             const existingProcess = teleoperationProcesses.get('current');
@@ -850,7 +1010,7 @@ app.post('/api/teleoperation/start', async (req, res) => {
         }
 
         // Get the path to the teleoperation script
-        const scriptPath = path.join(__dirname, '../../teleoperation/v2x_fleet_monitor.py');
+        const scriptPath = path.join(PROJECT_ROOT, 'teleoperation', 'v2x_fleet_monitor.py');
         
         // Check if script exists
         if (!fs.existsSync(scriptPath)) {
@@ -872,21 +1032,31 @@ app.post('/api/teleoperation/start', async (req, res) => {
         if (vehicleId) {
             args.push('--vehicle-id', vehicleId.toString());
         }
+        if (observeOnly) {
+            args.push('--observe-only');
+        }
+
+        const pythonExecutable = resolveTeleoperationPython();
+        const teleoperationEnv = buildTeleoperationEnv();
+        let startupOutput = '';
 
         // Start the Python process using spawn for better process management
-        const teleopProcess = spawn('python3', args, {
-            cwd: path.join(__dirname, '../../'),
-            env: {
-                ...process.env,
-                // Ensure CARLA_HOME is set if available
-                CARLA_HOME: process.env.CARLA_HOME || ''
-            },
+        const teleopProcess = spawn(pythonExecutable, args, {
+            cwd: PROJECT_ROOT,
+            env: teleoperationEnv,
             detached: false, // Keep attached so we can track it
             stdio: ['ignore', 'pipe', 'pipe'] // Ignore stdin, pipe stdout/stderr
         });
 
         // Store process reference
         teleoperationProcesses.set('current', teleopProcess);
+
+        const appendStartupOutput = (data) => {
+            startupOutput = `${startupOutput}${data.toString()}`;
+            if (startupOutput.length > 4000) {
+                startupOutput = startupOutput.slice(-4000);
+            }
+        };
 
         // Handle process exit
         teleopProcess.on('exit', (code, signal) => {
@@ -902,17 +1072,32 @@ app.post('/api/teleoperation/start', async (req, res) => {
 
         // Log output for debugging
         teleopProcess.stdout?.on('data', (data) => {
+            appendStartupOutput(data);
             console.log(`[Teleoperation] ${data.toString().trim()}`);
         });
 
         teleopProcess.stderr?.on('data', (data) => {
+            appendStartupOutput(data);
             console.error(`[Teleoperation] ${data.toString().trim()}`);
         });
+
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        if (teleopProcess.exitCode !== null || teleopProcess.killed) {
+            teleoperationProcesses.delete('current');
+            return res.status(500).json({
+                success: false,
+                error: `Teleoperation exited during startup${startupOutput ? `: ${startupOutput.trim()}` : ''}`,
+                pid: teleopProcess.pid,
+                python: pythonExecutable
+            });
+        }
 
         res.json({ 
             success: true, 
             message: 'Teleoperation GUI started',
-            pid: teleopProcess.pid
+            pid: teleopProcess.pid,
+            python: pythonExecutable,
+            display: teleoperationEnv.DISPLAY
         });
     } catch (error) {
         console.error('Error starting teleoperation:', error);

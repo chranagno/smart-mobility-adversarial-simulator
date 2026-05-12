@@ -7,7 +7,6 @@ import ScenarioDialog from './ScenarioDialog';
 import SimulationControls from './SimulationControls';
 import CarlaImageViewer from './CarlaImageViewer';
 import VehicleMap from './VehicleMap';
-import EgoSensorMonitor from './EgoSensorMonitor';
 import { api } from '../api';
 
 function Dashboard({ services, loading, error, onRefresh }) {
@@ -20,17 +19,24 @@ function Dashboard({ services, loading, error, onRefresh }) {
   const [currentRunningScenario, setCurrentRunningScenario] = useState(null);
   const [simulationStatus, setSimulationStatus] = useState(null);
   const [showScenarioDialog, setShowScenarioDialog] = useState(false);
+  const [isStartingTeleoperation, setIsStartingTeleoperation] = useState(false);
+
+  const isLocalFrontend = (() => {
+    const hostname = window.location.hostname;
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname.startsWith('127.');
+  })();
+  const canLaunchTeleoperation = isLocalFrontend && simulationStatus?.state === 'running';
 
   // Load current running scenario and simulation status on mount
   useEffect(() => {
     loadCurrentScenario();
     loadSimulationStatus();
-    
+
     // Poll for simulation status every 2 seconds
     const interval = setInterval(() => {
       loadSimulationStatus();
     }, 2000);
-    
+
     return () => clearInterval(interval);
   }, []);
 
@@ -65,7 +71,7 @@ function Dashboard({ services, loading, error, onRefresh }) {
 
   const handleScenarioSelect = async (scenario) => {
     setSelectedScenario(scenario);
-    
+
     // Actually load the scenario when submit is clicked
     try {
       const response = await api.simulation.load(scenario);
@@ -118,6 +124,38 @@ function Dashboard({ services, loading, error, onRefresh }) {
     }
   };
 
+  const handleLaunchTeleoperation = async () => {
+    if (!isLocalFrontend) {
+      alert('Teleoperation can only be launched from the local machine. Open the UI at http://localhost:5173.');
+      return;
+    }
+    if (simulationStatus?.state !== 'running') {
+      alert('Teleoperation is available only while the simulation is running.');
+      return;
+    }
+
+    setIsStartingTeleoperation(true);
+    try {
+      const result = await api.teleoperation.start({
+        host: '127.0.0.1',
+        port: 2000,
+        observeOnly: true
+      });
+
+      if (result.success) {
+        console.log('[Dashboard] Teleoperation GUI started successfully');
+      } else {
+        console.error('[Dashboard] Failed to start teleoperation:', result.error);
+        alert(`Failed to start teleoperation: ${result.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('[Dashboard] Error starting teleoperation:', err);
+      alert(`Error starting teleoperation: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsStartingTeleoperation(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-900">
       {/* Header */}
@@ -137,39 +175,28 @@ function Dashboard({ services, loading, error, onRefresh }) {
                 <Map className="w-4 h-4" />
                 <span>Vehicle Map</span>
               </button>
-              <button
+              {/* <button
                 onClick={() => setShowImageViewer(true)}
                 className="flex items-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
                 title="Open Carla Camera"
               >
                 <Camera className="w-4 h-4" />
                 <span>View Camera</span>
-              </button>
+              </button> */}
               <button
-                onClick={async () => {
-                  try {
-                    // Start teleoperation GUI (main interface without specific vehicle)
-                    const result = await api.teleoperation.start({
-                      host: '127.0.0.1',
-                      port: 2000
-                    });
-                    
-                    if (result.success) {
-                      console.log('[Dashboard] Teleoperation GUI started successfully');
-                    } else {
-                      console.error('[Dashboard] Failed to start teleoperation:', result.error);
-                      alert(`Failed to start teleoperation: ${result.error || 'Unknown error'}`);
-                    }
-                  } catch (err) {
-                    console.error('[Dashboard] Error starting teleoperation:', err);
-                    alert(`Error starting teleoperation: ${err.message || 'Unknown error'}`);
-                  }
-                }}
-                className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
-                title="Launch Teleoperation Interface"
+                onClick={handleLaunchTeleoperation}
+                disabled={isStartingTeleoperation || !canLaunchTeleoperation}
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50"
+                title={
+                  !isLocalFrontend
+                    ? 'Teleoperation is local-only'
+                    : simulationStatus?.state !== 'running'
+                      ? 'Teleoperation is available only while the simulation is running'
+                      : 'Launch Teleoperation Interface'
+                }
               >
                 <Gamepad2 className="w-4 h-4" />
-                <span>Teleoperation</span>
+                <span>{isStartingTeleoperation ? 'Launching...' : 'Teleoperation'}</span>
               </button>
               <button
                 onClick={onRefresh}
@@ -197,8 +224,8 @@ function Dashboard({ services, loading, error, onRefresh }) {
                 <div>
                   <h2 className="text-lg font-semibold text-white">Scenario Status</h2>
                   <p className="text-sm text-slate-400">
-                    {simulationStatus.scenario 
-                      ? `Current: ${simulationStatus.scenario}` 
+                    {simulationStatus.scenario
+                      ? `Current: ${simulationStatus.scenario}`
                       : 'No scenario loaded'}
                   </p>
                 </div>
@@ -208,9 +235,9 @@ function Dashboard({ services, loading, error, onRefresh }) {
                   w-3 h-3 rounded-full
                   ${simulationStatus.state === 'running' ? 'bg-green-500 animate-pulse' :
                     simulationStatus.state === 'loaded' ? 'bg-blue-500' :
-                    simulationStatus.state === 'loading' || simulationStatus.state === 'starting' ? 'bg-yellow-500 animate-pulse' :
-                    simulationStatus.state === 'idle' ? 'bg-slate-500' :
-                    'bg-slate-500'}
+                      simulationStatus.state === 'loading' || simulationStatus.state === 'starting' ? 'bg-yellow-500 animate-pulse' :
+                        simulationStatus.state === 'idle' ? 'bg-slate-500' :
+                          'bg-slate-500'}
                 `}></div>
                 <span className="text-slate-300 capitalize text-sm font-medium">
                   {simulationStatus.state || 'idle'}
@@ -234,13 +261,6 @@ function Dashboard({ services, loading, error, onRefresh }) {
             onLoadScenario={() => setShowScenarioDialog(true)}
           />
         </div>
-
-        {/* Ego Sensor Monitor — shown once a scenario is loaded or running */}
-        {simulationStatus && ['loaded', 'starting', 'running'].includes(simulationStatus.state) && (
-          <div className="mt-6">
-            <EgoSensorMonitor wsUrl="/vehicles" />
-          </div>
-        )}
 
         {/* Quick Actions */}
         <div className="mt-6 bg-slate-800 rounded-lg p-6 border border-slate-700">

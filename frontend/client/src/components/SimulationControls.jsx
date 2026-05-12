@@ -13,11 +13,16 @@ const SimulationControls = ({ api, currentScenario, services, simulationStatus, 
     frame: null,
     simSeconds: null,
     phase: 'idle',
+    vehicleCount: 0,
     recordingVehicles: 0,
     attacksEnabled: false,
+    avgSpeedKmh: null,
+    lastMessageType: null,
+    error: null,
     updatedAt: null,
   });
   const refreshIntervalRef = useRef(null);
+  const previousVehiclePositionsRef = useRef(new Map());
 
   //
   // Live runtime status from the orchestrator WebSocket.
@@ -40,17 +45,78 @@ const SimulationControls = ({ api, currentScenario, services, simulationStatus, 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type !== 'ego_sensor_data') return;
+          if (data.type === 'error') {
+            setLiveStatus(prev => ({
+              ...prev,
+              connected: false,
+              error: data.message || 'Vehicle telemetry stream is unavailable.',
+              lastMessageType: data.type,
+              updatedAt: Date.now(),
+            }));
+            return;
+          }
 
-          setLiveStatus({
-            connected: true,
-            frame: data.frame ?? null,
-            simSeconds: data.sim_seconds ?? null,
-            phase: data.status?.phase || (data.recording ? 'recording' : 'streaming'),
-            recordingVehicles: data.status?.recording_vehicles ?? data.recording_vehicles ?? 0,
-            attacksEnabled: Boolean(data.status?.attacks_enabled),
-            updatedAt: Date.now(),
-          });
+          if (data.type === 'vehicle_positions') {
+            const vehicles = Array.isArray(data.vehicles) ? data.vehicles : [];
+            const timestamp = Number(data.timestamp) || Date.now() / 1000;
+            const previousPositions = previousVehiclePositionsRef.current;
+            const nextPositions = new Map();
+            const speeds = vehicles
+              .map(vehicle => {
+                const id = String(vehicle.carla_id ?? vehicle.id);
+                const x = Number(vehicle.carla_x);
+                const y = Number(vehicle.carla_y);
+                const directSpeed = Number(vehicle.speed);
+                let fallbackSpeed = null;
+
+                if (Number.isFinite(x) && Number.isFinite(y)) {
+                  const previous = previousPositions.get(id);
+                  if (previous) {
+                    const dt = timestamp - previous.timestamp;
+                    if (dt > 1e-4) {
+                      const distance = Math.hypot(x - previous.x, y - previous.y);
+                      fallbackSpeed = distance / dt;
+                    }
+                  }
+                  nextPositions.set(id, { x, y, timestamp });
+                }
+
+                return Number.isFinite(directSpeed) && directSpeed > 0.1
+                  ? directSpeed
+                  : fallbackSpeed;
+              })
+              .filter(speed => Number.isFinite(speed));
+            previousVehiclePositionsRef.current = nextPositions;
+            const avgSpeedMs = speeds.length
+              ? speeds.reduce((sum, speed) => sum + speed, 0) / speeds.length
+              : null;
+
+            setLiveStatus(prev => ({
+              ...prev,
+              connected: true,
+              error: null,
+              vehicleCount: vehicles.length,
+              avgSpeedKmh: avgSpeedMs !== null ? avgSpeedMs * 3.6 : null,
+              lastMessageType: data.type,
+              updatedAt: Date.now(),
+            }));
+            return;
+          }
+
+          if (data.type === 'ego_sensor_data') {
+            setLiveStatus(prev => ({
+              ...prev,
+              connected: true,
+              error: null,
+              frame: data.frame ?? prev.frame,
+              simSeconds: data.sim_seconds ?? prev.simSeconds,
+              phase: data.status?.phase || (data.recording ? 'recording' : 'streaming'),
+              recordingVehicles: data.status?.recording_vehicles ?? data.recording_vehicles ?? prev.recordingVehicles,
+              attacksEnabled: Boolean(data.status?.attacks_enabled),
+              lastMessageType: data.type,
+              updatedAt: Date.now(),
+            }));
+          }
         } catch (_) {
           // Ignore non-status messages on the shared vehicle stream.
         }
@@ -202,13 +268,16 @@ const SimulationControls = ({ api, currentScenario, services, simulationStatus, 
     if (simulationState === 'starting') return 'Starting orchestrator and synchronizing simulators.';
     if (simulationState === 'stopping') return 'Stopping simulation services.';
     if (simulationState !== 'running') return 'Simulation is stopped.';
+    if (liveStatus.error) return liveStatus.error;
     if (!liveStatus.connected) return 'Running, waiting for orchestrator status stream.';
     if (liveStatus.phase === 'recording') {
       return liveStatus.attacksEnabled
         ? 'Recording sensor frames and adversarial attack outputs.'
         : 'Recording sensor frames; model server unavailable, attacks paused.';
     }
-    return 'Streaming live telemetry from the orchestrator.';
+    return liveStatus.lastMessageType === 'vehicle_positions'
+      ? 'Streaming live vehicle positions from the orchestrator.'
+      : 'Streaming live telemetry from the orchestrator.';
   };
 
   //
@@ -532,7 +601,7 @@ const SimulationControls = ({ api, currentScenario, services, simulationStatus, 
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <div className={`w-2 h-2 rounded-full ${liveStatus.connected ? 'bg-green-500' : 'bg-slate-500'}`}></div>
-                {liveStatus.connected ? 'Connected' : 'Waiting for orchestrator'}
+                {liveStatus.connected ? 'Connected' : liveStatus.error ? 'Stream unavailable' : 'Waiting for orchestrator'}
               </div>
             </div>
 
@@ -549,12 +618,12 @@ const SimulationControls = ({ api, currentScenario, services, simulationStatus, 
               </div>
               <div>
                 <div className="text-xs text-slate-500">Vehicles</div>
-                <div className="font-mono text-lg text-white">{liveStatus.recordingVehicles || 0}</div>
+                <div className="font-mono text-lg text-white">{liveStatus.vehicleCount || 0}</div>
               </div>
               <div>
-                <div className="text-xs text-slate-500">Attacks</div>
-                <div className={`font-medium ${liveStatus.attacksEnabled ? 'text-green-400' : 'text-yellow-400'}`}>
-                  {liveStatus.attacksEnabled ? 'Active' : 'Paused'}
+                <div className="text-xs text-slate-500">Avg Speed</div>
+                <div className="font-mono text-lg text-white">
+                  {liveStatus.avgSpeedKmh !== null ? `${liveStatus.avgSpeedKmh.toFixed(1)} km/h` : '—'}
                 </div>
               </div>
             </div>
